@@ -144,7 +144,7 @@ export function AuthProvider({ children }: Props) {
       serviceUrl: getBaseUrl(BaseUrlTypes.ENUM_HOST_BASE_URI) + endpoints.auth.login,
     });
 
-    const { accessToken } = res.data;
+    const { token } = res.data;
 
     setSession(accessToken);
 
