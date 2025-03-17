@@ -8,6 +8,7 @@ import { endpoints, getBaseUrl, BaseUrlTypes } from 'src/utils/axios';
 import { AuthContext } from './auth-context';
 import { setSession, isValidToken } from './utils';
 import { AuthUserType, ActionMapType, AuthStateType } from '../../types';
+import { jwtDecode } from 'jwt-decode';
 
 // ----------------------------------------------------------------------
 /**
@@ -86,10 +87,17 @@ type Props = {
 export function AuthProvider({ children }: Props) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  const getCookie = (name: string) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+  };
+
   const initialize = useCallback(async () => {
     try {
-      const accessToken = sessionStorage.getItem(STORAGE_KEY);
+      const accessToken = getCookie(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
 
+      const decodedToken = jwtDecode(accessToken || '');
       if (accessToken && isValidToken(accessToken)) {
         setSession(accessToken);
 
@@ -97,11 +105,11 @@ export function AuthProvider({ children }: Props) {
           type: Types.INITIAL,
           payload: {
             user: {
+              email: decodedToken?.sub,
               accessToken,
             },
           },
         });
-        }
       } else {
         dispatch({
           type: Types.INITIAL,
@@ -131,21 +139,32 @@ export function AuthProvider({ children }: Props) {
       email,
       password,
     };
-
-    const res = await axios.post('/api/post', {
+    const res = await axios.post('/api/auth/login', {
       ...data,
-      serviceUrl: getBaseUrl(BaseUrlTypes.ENUM_HOST_BASE_URI) + endpoints.auth.login,
     });
 
     const { token } = res.data;
-
-    setSession(accessToken);
-
+    document.cookie = `${STORAGE_KEY}=${token}; path=/; max-age=${24 * 60 * 60}`;
+    setSession(token);
+    const decodedToken = jwtDecode(token || '');
     dispatch({
       type: Types.LOGIN,
       payload: {
         user: {
-          // ...user,
+          email: decodedToken?.sub,
+          token,
+        },
+      },
+    });
+  }, []);
+
+  const setLogin = useCallback(async (user: any, accessToken: string) => {
+    setSession(accessToken);
+    dispatch({
+      type: Types.LOGIN,
+      payload: {
+        user: {
+          ...user,
           accessToken,
         },
       },
@@ -160,21 +179,18 @@ export function AuthProvider({ children }: Props) {
       fullName,
     };
 
-    const res = await axios.post('/api/post', {
-      serviceUrl: getBaseUrl(BaseUrlTypes.ENUM_HOST_BASE_URI) + endpoints.auth.register,
-      ...data,
-    });
+    const res = await axios.post('/api/auth/signup', { ...data });
 
-    const { accessToken, user } = res.data;
-
-    sessionStorage.setItem(STORAGE_KEY, accessToken);
-
+    const { token, user } = res.data;
+    document.cookie = `${STORAGE_KEY}=${token}; path=/; max-age=${24 * 60 * 60}`;
+    sessionStorage.setItem(STORAGE_KEY, token);
+    const decodedToken = jwtDecode(token || '');
     dispatch({
       type: Types.REGISTER,
       payload: {
         user: {
-          ...user,
-          accessToken,
+          email: decodedToken?.sub,
+          token,
         },
       },
     });
@@ -183,6 +199,7 @@ export function AuthProvider({ children }: Props) {
   // LOGOUT
   const logout = useCallback(async () => {
     setSession(null);
+    document.cookie = `${STORAGE_KEY}=; path=/; max-age=0`;
     dispatch({
       type: Types.LOGOUT,
     });
@@ -205,8 +222,9 @@ export function AuthProvider({ children }: Props) {
       login,
       register,
       logout,
+      setLogin,
     }),
-    [login, logout, register, state.user, status]
+    [login, logout, register, setLogin, state.user, status]
   );
 
   return <AuthContext.Provider value={memoizedValue}>{children}</AuthContext.Provider>;
