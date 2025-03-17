@@ -93,21 +93,14 @@ export function AuthProvider({ children }: Props) {
       if (accessToken && isValidToken(accessToken)) {
         setSession(accessToken);
 
-        // const res = await axios.get(endpoints.auth.me);
-
-        // const { user } = res.data;
-        const tmpUser: string | null = sessionStorage.getItem(USER_KEY);
-        if (tmpUser) {
-          const user = JSON.parse(tmpUser);
-          dispatch({
-            type: Types.INITIAL,
-            payload: {
-              user: {
-                ...user,
-                accessToken,
-              },
+        dispatch({
+          type: Types.INITIAL,
+          payload: {
+            user: {
+              accessToken,
             },
-          });
+          },
+        });
         }
       } else {
         dispatch({
